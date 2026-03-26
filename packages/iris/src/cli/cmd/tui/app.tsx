@@ -7,6 +7,7 @@ import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMo
 import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./win32"
 import { Installation } from "@/installation"
 import { Flag } from "@/flag/flag"
+import { useTeam } from "@tui/context/team"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
@@ -42,6 +43,7 @@ import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { TuiConfigProvider } from "./context/tui-config"
 import { TuiConfig } from "@/config/tui"
+import { TeamProvider } from "@tui/context/team"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -158,9 +160,11 @@ export function tui(input: {
                                       <CommandProvider>
                                         <FrecencyProvider>
                                           <PromptHistoryProvider>
-                                            <PromptRefProvider>
-                                              <App />
-                                            </PromptRefProvider>
+                            <PromptRefProvider>
+                              <TeamProvider>
+                                <App />
+                              </TeamProvider>
+                            </PromptRefProvider>
                                           </PromptHistoryProvider>
                                         </FrecencyProvider>
                                       </CommandProvider>
@@ -282,6 +286,8 @@ function App() {
       renderer.setTerminalTitle(`OC | ${title}`)
     }
   })
+
+  const teamCtx = useTeam()
 
   const args = useArgs()
   onMount(() => {
@@ -676,6 +682,106 @@ function App() {
         dialog.clear()
       },
     },
+    ...(teamCtx.enabled
+      ? [
+          {
+            title: "Toggle team task list",
+            value: "team.task_list",
+            keybind: "team_task_list" as const,
+            category: "Team",
+            slash: {
+              name: "tasks",
+            },
+            onSelect: (dialog: ReturnType<typeof useDialog>) => {
+              teamCtx.toggleTaskList()
+              dialog.clear()
+            },
+          },
+          {
+            title: "Next team member",
+            value: "team.next",
+            keybind: "team_next" as const,
+            category: "Team",
+            hidden: true,
+            onSelect: (dialog: ReturnType<typeof useDialog>) => {
+              teamCtx.cycleNext()
+              dialog.clear()
+            },
+          },
+          {
+            title: "Previous team member",
+            value: "team.prev",
+            keybind: "team_prev" as const,
+            category: "Team",
+            hidden: true,
+            onSelect: (dialog: ReturnType<typeof useDialog>) => {
+              teamCtx.cyclePrev()
+              dialog.clear()
+            },
+          },
+          {
+            title: "Go to team lead",
+            value: "team.lead",
+            keybind: "team_lead" as const,
+            category: "Team",
+            slash: {
+              name: "lead",
+            },
+            onSelect: (dialog: ReturnType<typeof useDialog>) => {
+              teamCtx.goToLead()
+              dialog.clear()
+            },
+          },
+          {
+            title: teamCtx.enabled ? "Disable teams" : "Enable teams",
+            value: "team.toggle",
+            category: "Team",
+            slash: {
+              name: "team",
+            },
+            onSelect: async (dialog: ReturnType<typeof useDialog>) => {
+              const next = !teamCtx.enabled
+              await sdk
+                .fetch(`${sdk.url}/config`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ team: { enabled: next } }),
+                })
+                .catch(() => {})
+              teamCtx.setEnabled(next)
+              toast.show({
+                variant: "info",
+                message: next ? "Agent teams enabled" : "Agent teams disabled",
+              })
+              dialog.clear()
+            },
+          },
+        ]
+      : [
+          {
+            title: "Enable teams",
+            value: "team.toggle",
+            category: "Team",
+            slash: {
+              name: "team",
+            },
+            onSelect: async (dialog: ReturnType<typeof useDialog>) => {
+              await sdk
+                .fetch(`${sdk.url}/config`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ team: { enabled: true } }),
+                })
+                .catch(() => {})
+              teamCtx.setEnabled(true)
+              toast.show({
+                variant: "info",
+                message: "Agent teams enabled",
+              })
+              dialog.clear()
+            },
+          },
+        ]),
   ])
 
   sdk.event.on(TuiEvent.CommandExecute.type, (evt) => {
@@ -728,6 +834,17 @@ function App() {
       message,
       duration: 5000,
     })
+  })
+
+  sdk.event.on("team.created" as any, () => {
+    if (teamCtx.enabled) {
+      toast.show({
+        variant: "info",
+        title: "Team Created",
+        message: "An agent team has been created for this session",
+        duration: 5000,
+      })
+    }
   })
 
   sdk.event.on(Installation.Event.UpdateAvailable.type, (evt) => {

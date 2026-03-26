@@ -951,6 +951,14 @@ export namespace Config {
       terminal_title_toggle: z.string().optional().default("none").describe("Toggle terminal title"),
       tips_toggle: z.string().optional().default("<leader>h").describe("Toggle tips on home screen"),
       display_thinking: z.string().optional().default("none").describe("Toggle thinking blocks visibility"),
+      team_next: z.string().optional().default("none").describe("Navigate to next team member session"),
+      team_prev: z.string().optional().default("none").describe("Navigate to previous team member session"),
+      team_lead: z.string().optional().default("none").describe("Navigate to team lead session"),
+      team_task_list: z
+        .string()
+        .optional()
+        .default("none")
+        .describe("Toggle team task list visibility"),
     })
     .strict()
     .meta({

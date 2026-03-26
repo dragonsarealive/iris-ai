@@ -134,8 +134,47 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       setStore("workspaceList", reconcile(result.data))
     }
 
+    async function syncTeams() {
+      try {
+        const res = await sdk.fetch(`${sdk.url}/team?projectID=default`)
+        if (!res.ok) return
+        const teams = (await res.json()) as TeamInfo[]
+        if (!teams.length) return
+        batch(() => {
+          for (const team of teams) {
+            setStore("team", team.id, reconcile(team))
+          }
+        })
+        await Promise.all(
+          teams.map(async (team) => {
+            try {
+              const detailRes = await sdk.fetch(`${sdk.url}/team/${team.id}`)
+              if (!detailRes.ok) return
+              const detail = (await detailRes.json()) as {
+                info: TeamInfo
+                members: TeamMemberInfo[]
+                tasks: TaskItemInfo[]
+              }
+              batch(() => {
+                setStore("team", team.id, reconcile(detail.info))
+                setStore("team_member", team.id, reconcile(detail.members))
+                setStore("task_item", team.id, reconcile(detail.tasks))
+              })
+            } catch {}
+          }),
+        )
+      } catch {}
+    }
+
     sdk.event.listen((e) => {
       const event = e.details
+      const raw = event as { type: string; properties: Record<string, any> }
+
+      if (raw.type.startsWith("team.")) {
+        handleTeamEvent(raw)
+        return
+      }
+
       switch (event.type) {
         case "server.instance.disposed":
           bootstrap()
@@ -373,6 +412,121 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       }
     })
 
+    function handleTeamEvent(raw: { type: string; properties: Record<string, any> }) {
+      switch (raw.type) {
+        case "team.created":
+        case "team.updated": {
+          const team = raw.properties.team as TeamInfo
+          setStore("team", team.id, reconcile(team))
+          break
+        }
+
+        case "team.disbanded": {
+          const disbandedID = raw.properties.teamID as string
+          setStore(
+            produce((draft) => {
+              delete draft.team[disbandedID]
+              delete draft.team_member[disbandedID]
+              delete draft.task_item[disbandedID]
+              delete draft.orchestration_steps[disbandedID]
+            }),
+          )
+          break
+        }
+
+        case "team.member.status": {
+          const { teamID: mTeamID, sessionID: mSessionID, status: mStatus } = raw.properties as {
+            teamID: string
+            sessionID: string
+            status: string
+          }
+          const memberList = store.team_member[mTeamID]
+          if (memberList) {
+            const idx = memberList.findIndex((m) => m.sessionID === mSessionID)
+            if (idx >= 0) {
+              setStore("team_member", mTeamID, idx, "status", mStatus as TeamMemberInfo["status"])
+            }
+          }
+          break
+        }
+
+        case "team.task.updated": {
+          const { teamID: tTeamID, task } = raw.properties as { teamID: string; task: TaskItemInfo }
+          const taskList = store.task_item[tTeamID]
+          if (!taskList) {
+            setStore("task_item", tTeamID, [task])
+          } else {
+            const idx = taskList.findIndex((t) => t.id === task.id)
+            if (idx >= 0) {
+              setStore("task_item", tTeamID, idx, reconcile(task))
+            } else {
+              setStore(
+                "task_item",
+                tTeamID,
+                produce((draft) => {
+                  draft.push(task)
+                }),
+              )
+            }
+          }
+          break
+        }
+
+        case "team.message.sent": {
+          const { msg } = raw.properties as { teamID: string; msg: TeamMessageInfo }
+          const key = msg.toSessionID ?? msg.fromSessionID
+          const existing = store.team_message[key]
+          if (!existing) {
+            setStore("team_message", key, [msg])
+          } else {
+            setStore(
+              "team_message",
+              key,
+              produce((draft) => {
+                draft.push(msg)
+              }),
+            )
+          }
+          break
+        }
+
+        case "team.orchestration.step": {
+          const stepProps = raw.properties as {
+            teamID: string
+            time: number
+            actorSessionID: string
+            targetSessionID?: string
+            action: string
+            detail?: string
+          }
+          const oTeamID = stepProps.teamID
+          const step: OrchestrationStepInfo = {
+            id: `${stepProps.time}-${stepProps.action}`,
+            teamID: oTeamID,
+            time: stepProps.time,
+            actorSessionID: stepProps.actorSessionID,
+            targetSessionID: stepProps.targetSessionID,
+            action: stepProps.action,
+            detail: stepProps.detail,
+          }
+          const oSteps = store.orchestration_steps[oTeamID]
+          if (!oSteps) {
+            setStore("orchestration_steps", oTeamID, [step])
+          } else {
+            setStore(
+              "orchestration_steps",
+              oTeamID,
+              produce((draft) => {
+                draft.push(step)
+                if (draft.length > 50) draft.splice(0, draft.length - 50)
+              }),
+            )
+          }
+          break
+        }
+      }
+    }
+
     const exit = useExit()
     const args = useArgs()
 
@@ -444,6 +598,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.vcs.get().then((x) => setStore("vcs", reconcile(x.data))),
             sdk.client.path.get().then((x) => setStore("path", reconcile(x.data!))),
             syncWorkspaces(),
+            syncTeams(),
           ]).then(() => {
             setStore("status", "complete")
           })

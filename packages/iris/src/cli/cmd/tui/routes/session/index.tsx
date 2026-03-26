@@ -14,6 +14,13 @@ import {
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import path from "path"
+
+/** Command name for copy-paste hints (matches argv0; falls back to `iris` when run via bun/node). */
+function cliInvokeName(): string {
+  const base = path.basename(process.argv[0] ?? "iris").replace(/\.(exe|cmd|bat)$/i, "")
+  if (base === "bun" || base === "node" || base === "deno") return "iris"
+  return base || "iris"
+}
 import { useRoute, useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { SplitBorder } from "@tui/component/border"
@@ -81,6 +88,11 @@ import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
+import { useTeam } from "@tui/context/team"
+import { TeamStatus } from "@tui/panel/team-status"
+import { TaskList } from "@tui/panel/task-list"
+import { TeamInbox } from "@tui/panel/team-inbox"
+import { OrchestrationPanel } from "@tui/panel/orchestration"
 
 addDefaultParsers(parsers.parsers)
 
@@ -170,6 +182,9 @@ export function Session() {
   const showTimestamps = createMemo(() => timestamps() === "show")
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
 
+  const teamCtx = useTeam()
+  const teamActive = createMemo(() => teamCtx.enabled && !!teamCtx.activeTeamID)
+
   const scrollAcceleration = createMemo(() => {
     const tui = tuiConfig
     if (tui?.scroll_acceleration?.enabled) {
@@ -253,7 +268,7 @@ export function Session() {
         `${logo[3] ?? ""}`,
         ``,
         `  ${weak("Session")}${UI.Style.TEXT_NORMAL_BOLD}${title}${UI.Style.TEXT_NORMAL}`,
-        `  ${weak("Continue")}${UI.Style.TEXT_NORMAL_BOLD}opencode -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
+        `  ${weak("Continue")}${UI.Style.TEXT_NORMAL_BOLD}${cliInvokeName()} -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
         ``,
       ].join("\n"),
     )
@@ -263,6 +278,27 @@ export function Session() {
     if (!session()?.parentID) return
     if (keybind.match("app_exit", evt)) {
       exit()
+    }
+  })
+
+  useKeyboard((evt) => {
+    if (!teamActive()) return
+    if (keybind.match("team_next", evt)) {
+      teamCtx.cycleNext()
+      evt.preventDefault()
+      evt.stopPropagation()
+    } else if (keybind.match("team_prev", evt)) {
+      teamCtx.cyclePrev()
+      evt.preventDefault()
+      evt.stopPropagation()
+    } else if (keybind.match("team_lead", evt)) {
+      teamCtx.goToLead()
+      evt.preventDefault()
+      evt.stopPropagation()
+    } else if (keybind.match("team_task_list", evt)) {
+      teamCtx.toggleTaskList()
+      evt.preventDefault()
+      evt.stopPropagation()
     }
   })
 
@@ -1051,6 +1087,9 @@ export function Session() {
             <Show when={showHeader() && (!sidebarVisible() || !wide())}>
               <Header />
             </Show>
+            <Show when={teamActive()}>
+              <TeamStatus />
+            </Show>
             <scrollbox
               ref={(r) => (scroll = r)}
               viewportOptions={{
@@ -1165,6 +1204,11 @@ export function Session() {
                 )}
               </For>
             </scrollbox>
+            <Show when={teamActive()}>
+              <TaskList />
+              <TeamInbox />
+              <OrchestrationPanel />
+            </Show>
             <box flexShrink={0}>
               <Show when={permissions().length > 0}>
                 <PermissionPrompt request={permissions()[0]} />

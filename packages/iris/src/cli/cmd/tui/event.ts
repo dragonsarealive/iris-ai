@@ -46,4 +46,10 @@ export const TuiEvent = {
       sessionID: SessionID.zod.describe("Session ID to navigate to"),
     }),
   ),
+  TeamNavigate: BusEvent.define(
+    "tui.team.navigate",
+    z.object({
+      action: z.enum(["next", "prev", "lead", "toggle_tasks"]).describe("Team navigation action"),
+    }),
+  ),
 }

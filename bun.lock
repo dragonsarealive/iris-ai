@@ -26,7 +26,7 @@
     },
     "packages/iris": {
       "name": "iris-code",
-      "version": "1.2.27",
+      "version": "1.2.29",
       "bin": {
         "iris-code": "./bin/iris",
         "iris": "./bin/iris",
