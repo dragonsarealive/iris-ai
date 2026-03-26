@@ -27,7 +27,9 @@ permissions:
 env:
   OPENCODE_VERSION: ${{ inputs.version || '' }}
   OPENCODE_CHANNEL: ${{ inputs.channel || 'latest' }}
-  OPENCODE_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') && '1' || '' }}
+  # Tag push, or manual run with version (upload to e.g. v1.2.27 while on dev)
+  OPENCODE_RELEASE: ${{ (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.version != '')) && '1' || '' }}
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version != '' && format('v{0}', github.event.inputs.version) || github.ref_name }}
 
 jobs:
   build-cli:
@@ -191,10 +193,11 @@ jobs:
               cd "${key}/bin" && zip -r "../../${name}.zip" . && cd -
             fi
           done
-          TAG="${GITHUB_REF#refs/tags/}"
+          TAG="${RELEASE_TAG}"
           gh release upload "$TAG" dist/*.zip dist/*.tar.gz --clobber --repo "${{ github.repository }}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
 
   publish-sdk:
     runs-on: ubuntu-latest
