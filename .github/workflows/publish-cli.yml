@@ -111,75 +111,6 @@ jobs:
             require('fs').writeFileSync('dist/iris-code/package.json', JSON.stringify(pkg, null, 2));
           " "$BINARIES_JSON" "$VERSION"
 
-      - name: Publish platform packages
-        if: ${{ !inputs.dry_run }}
-        working-directory: packages/iris
-        run: |
-          CHANNEL="${OPENCODE_CHANNEL:-latest}"
-          npm_publish_retry() {
-            local delay=90
-            local attempt=1
-            local max=8
-            while [ "$attempt" -le "$max" ]; do
-              if npm publish *.tgz --access public --tag "$CHANNEL"; then
-                return 0
-              fi
-              if [ "$attempt" -eq "$max" ]; then
-                return 1
-              fi
-              echo "npm publish failed (attempt $attempt/$max), waiting ${delay}s (often E429 rate limit)..."
-              sleep "$delay"
-              attempt=$((attempt + 1))
-              delay=$((delay + 45))
-            done
-          }
-          for dir in dist/iris-code-*/; do
-            [ -d "$dir" ] || continue
-            echo "Publishing $(basename $dir)..."
-            chmod -R 755 "$dir"
-            cd "$dir"
-            NAME=$(node -p "require('./package.json').name")
-            VER=$(node -p "require('./package.json').version")
-            if npm view "${NAME}@${VER}" version 2>/dev/null | grep -qx "$VER"; then
-              echo "$NAME@$VER already on npm, skipping"
-              cd -
-              continue
-            fi
-            bun pm pack
-            npm_publish_retry
-            # npm rate-limits rapid large publishes; pause between platforms
-            sleep 90
-            cd -
-          done
-
-      - name: Publish wrapper package
-        if: ${{ !inputs.dry_run }}
-        working-directory: packages/iris/dist/iris-code
-        run: |
-          CHANNEL="${OPENCODE_CHANNEL:-latest}"
-          NAME=$(node -p "require('./package.json').name")
-          VER=$(node -p "require('./package.json').version")
-          if npm view "${NAME}@${VER}" version 2>/dev/null | grep -qx "$VER"; then
-            echo "$NAME@$VER already on npm, skipping"
-          else
-            bun pm pack
-            delay=90
-            attempt=1
-            max=8
-            while [ "$attempt" -le "$max" ]; do
-              if npm publish *.tgz --access public --tag "$CHANNEL"; then
-                break
-              fi
-              if [ "$attempt" -eq "$max" ]; then
-                exit 1
-              fi
-              echo "npm publish failed (attempt $attempt/$max), waiting ${delay}s..."
-              sleep "$delay"
-              attempt=$((attempt + 1))
-              delay=$((delay + 45))
-            done
-          fi
-
       - name: Upload release artifacts
         if: ${{ env.OPENCODE_RELEASE == '1' }}
         working-directory: packages/iris
@@ -198,6 +129,85 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ env.RELEASE_TAG }}
+
+      - name: Publish platform packages
+        if: ${{ !inputs.dry_run }}
+        working-directory: packages/iris
+        run: |
+          CHANNEL="${OPENCODE_CHANNEL:-latest}"
+          FAILED=""
+          npm_publish_retry() {
+            local delay=120
+            local attempt=1
+            local max=8
+            while [ "$attempt" -le "$max" ]; do
+              if npm publish *.tgz --access public --tag "$CHANNEL"; then
+                return 0
+              fi
+              if [ "$attempt" -eq "$max" ]; then
+                return 1
+              fi
+              echo "npm publish failed (attempt $attempt/$max), waiting ${delay}s (often E429 rate limit)..."
+              sleep "$delay"
+              attempt=$((attempt + 1))
+              delay=$((delay + 45))
+            done
+          }
+          for dir in dist/iris-code-*/; do
+            [ -d "$dir" ] || continue
+            PKG_NAME=$(basename "$dir")
+            echo "Publishing ${PKG_NAME}..."
+            chmod -R 755 "$dir"
+            cd "$dir"
+            NAME=$(node -p "require('./package.json').name")
+            VER=$(node -p "require('./package.json').version")
+            if npm view "${NAME}@${VER}" version 2>/dev/null | grep -qx "$VER"; then
+              echo "$NAME@$VER already on npm, skipping"
+              cd -
+              continue
+            fi
+            bun pm pack
+            if npm_publish_retry; then
+              echo "✓ $NAME@$VER published"
+            else
+              echo "✗ $NAME@$VER FAILED"
+              FAILED="$FAILED $NAME"
+            fi
+            sleep 180
+            cd -
+          done
+          if [ -n "$FAILED" ]; then
+            echo "::error::Failed to publish:$FAILED"
+            exit 1
+          fi
+
+      - name: Publish wrapper package
+        if: ${{ !inputs.dry_run }}
+        working-directory: packages/iris/dist/iris-code
+        run: |
+          CHANNEL="${OPENCODE_CHANNEL:-latest}"
+          NAME=$(node -p "require('./package.json').name")
+          VER=$(node -p "require('./package.json').version")
+          if npm view "${NAME}@${VER}" version 2>/dev/null | grep -qx "$VER"; then
+            echo "$NAME@$VER already on npm, skipping"
+          else
+            bun pm pack
+            delay=120
+            attempt=1
+            max=8
+            while [ "$attempt" -le "$max" ]; do
+              if npm publish *.tgz --access public --tag "$CHANNEL"; then
+                break
+              fi
+              if [ "$attempt" -eq "$max" ]; then
+                exit 1
+              fi
+              echo "npm publish failed (attempt $attempt/$max), waiting ${delay}s..."
+              sleep "$delay"
+              attempt=$((attempt + 1))
+              delay=$((delay + 45))
+            done
+          fi
 
   publish-sdk:
     runs-on: ubuntu-latest
