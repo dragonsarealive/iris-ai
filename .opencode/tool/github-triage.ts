@@ -53,7 +53,7 @@ export default tool({
   },
   async execute(args) {
     const issue = getIssueNumber()
-    const owner = "anomalyco"
+    const owner = "dragonsarealive"
     const repo = "opencode"
 
     const results: string[] = []

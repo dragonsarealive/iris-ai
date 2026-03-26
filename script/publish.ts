@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Script } from "@opencode-ai/script"
+import { Script } from "@iris-ai/script"
 import { $ } from "bun"
 import { fileURLToPath } from "url"
 
@@ -47,13 +47,6 @@ for (const file of pkgjsons) {
   await Bun.file(file).write(pkg)
 }
 
-const extensionToml = fileURLToPath(new URL("../packages/extensions/zed/extension.toml", import.meta.url))
-let toml = await Bun.file(extensionToml).text()
-toml = toml.replace(/^version = "[^"]+"/m, `version = "${Script.version}"`)
-toml = toml.replaceAll(/releases\/download\/v[^/]+\//g, `releases/download/v${Script.version}/`)
-console.log("updated:", extensionToml)
-await Bun.file(extensionToml).write(toml)
-
 await $`bun install`
 await import(`../packages/sdk/js/script/build.ts`)
 
@@ -67,14 +60,11 @@ if (Script.release) {
     await new Promise((resolve) => setTimeout(resolve, 5_000))
   }
 
-  await import(`../packages/desktop/scripts/finalize-latest-json.ts`)
-  await import(`../packages/desktop-electron/scripts/finalize-latest-yml.ts`)
-
   await $`gh release edit v${Script.version} --draft=false --repo ${process.env.GH_REPO}`
 }
 
 console.log("\n=== cli ===\n")
-await import(`../packages/opencode/script/publish.ts`)
+await import(`../packages/iris/script/publish.ts`)
 
 console.log("\n=== sdk ===\n")
 await import(`../packages/sdk/js/script/publish.ts`)
