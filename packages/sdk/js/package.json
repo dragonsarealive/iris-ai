@@ -1,9 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/sdk",
+  "name": "@iris-ai/sdk",
   "version": "1.2.27",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dragonsarealive/iris-ai"
+  },
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "build": "bun ./script/build.ts"

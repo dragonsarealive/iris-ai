@@ -1,0 +1,186 @@
+name: publish-cli
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (e.g. 1.2.28). Leave empty to auto-derive from tag or branch."
+        required: false
+      channel:
+        description: "npm dist-tag"
+        required: false
+        default: "latest"
+      dry_run:
+        description: "Skip actual npm publish (build only)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: publish-cli-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  OPENCODE_VERSION: ${{ inputs.version || '' }}
+  OPENCODE_CHANNEL: ${{ inputs.channel || 'latest' }}
+  OPENCODE_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') && '1' || '' }}
+
+jobs:
+  build-cli:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Build CLI platform binaries
+        run: bun run build
+        working-directory: packages/iris
+
+      - name: Upload dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-dist
+          path: packages/iris/dist/
+          retention-days: 3
+
+  publish-cli:
+    needs: build-cli
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Download dist
+        uses: actions/download-artifact@v4
+        with:
+          name: cli-dist
+          path: packages/iris/dist
+
+      - name: Configure npm auth
+        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+
+      - name: Prepare wrapper package
+        working-directory: packages/iris
+        run: |
+          mkdir -p dist/iris-code
+          cp -r bin dist/iris-code/bin
+          cp script/postinstall.mjs dist/iris-code/postinstall.mjs
+          cp ../../LICENSE dist/iris-code/LICENSE
+
+          BINARIES_JSON=$(node -e "
+            const fs = require('fs');
+            const glob = require('path');
+            const bins = {};
+            for (const d of fs.readdirSync('dist')) {
+              const p = 'dist/' + d + '/package.json';
+              if (d !== 'iris-code' && fs.existsSync(p)) {
+                const pkg = JSON.parse(fs.readFileSync(p, 'utf8'));
+                bins[pkg.name] = pkg.version;
+              }
+            }
+            process.stdout.write(JSON.stringify(bins));
+          ")
+          VERSION=$(node -e "process.stdout.write(Object.values(JSON.parse(process.argv[1]))[0])" "$BINARIES_JSON")
+
+          node -e "
+            const bins = JSON.parse(process.argv[1]);
+            const pkg = {
+              name: 'iris-code',
+              bin: {
+                'iris-code': './bin/iris',
+                iris: './bin/iris',
+                opencode: './bin/opencode'
+              },
+              scripts: { postinstall: 'bun ./postinstall.mjs || node ./postinstall.mjs' },
+              version: process.argv[2],
+              license: 'MIT',
+              optionalDependencies: bins
+            };
+            require('fs').writeFileSync('dist/iris-code/package.json', JSON.stringify(pkg, null, 2));
+          " "$BINARIES_JSON" "$VERSION"
+
+      - name: Publish platform packages
+        if: ${{ !inputs.dry_run }}
+        working-directory: packages/iris
+        run: |
+          CHANNEL="${OPENCODE_CHANNEL:-latest}"
+          for dir in dist/iris-code-*/; do
+            [ -d "$dir" ] || continue
+            echo "Publishing $(basename $dir)..."
+            chmod -R 755 "$dir"
+            cd "$dir"
+            bun pm pack
+            npm publish *.tgz --access public --tag "$CHANNEL"
+            cd -
+          done
+
+      - name: Publish wrapper package
+        if: ${{ !inputs.dry_run }}
+        working-directory: packages/iris/dist/iris-code
+        run: |
+          CHANNEL="${OPENCODE_CHANNEL:-latest}"
+          bun pm pack
+          npm publish *.tgz --access public --tag "$CHANNEL"
+
+      - name: Upload release artifacts
+        if: ${{ env.OPENCODE_RELEASE == '1' }}
+        working-directory: packages/iris
+        run: |
+          for key in dist/iris-code-*/; do
+            [ -d "$key" ] || continue
+            name=$(basename "$key")
+            if echo "$name" | grep -q linux; then
+              tar -czf "dist/${name}.tar.gz" -C "${key}/bin" .
+            else
+              cd "${key}/bin" && zip -r "../../${name}.zip" . && cd -
+            fi
+          done
+          TAG="${GITHUB_REF#refs/tags/}"
+          gh release upload "$TAG" dist/*.zip dist/*.tar.gz --clobber --repo "${{ github.repository }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Configure npm auth
+        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+
+      - name: Build and publish @iris-ai/sdk
+        if: ${{ !inputs.dry_run }}
+        working-directory: packages/sdk/js
+        run: bun run script/publish.ts
+
+  publish-plugin:
+    needs: publish-sdk
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Configure npm auth
+        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+
+      - name: Build and publish @iris-ai/plugin
+        if: ${{ !inputs.dry_run }}
+        working-directory: packages/plugin
+        run: bun run script/publish.ts
