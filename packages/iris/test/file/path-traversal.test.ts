@@ -6,6 +6,12 @@ import { File } from "../../src/file"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 
+/** Path on the same volume that is not inside `projectDir` (avoids /etc/passwd on win32). */
+function pathOutsideProject(projectDir: string, segment: string) {
+  const root = path.parse(path.resolve(projectDir)).root
+  return path.join(root, `__iris_test_outside__`, segment, "blocked.txt")
+}
+
 describe("Filesystem.contains", () => {
   test("allows paths within project", () => {
     expect(Filesystem.contains("/project", "/project/src")).toBe(true)
@@ -152,8 +158,8 @@ describe("Instance.containsPath", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: () => {
-        expect(Instance.containsPath("/etc/passwd")).toBe(false)
-        expect(Instance.containsPath("/tmp/other-project")).toBe(false)
+        expect(Instance.containsPath(pathOutsideProject(tmp.path, "a"))).toBe(false)
+        expect(Instance.containsPath(pathOutsideProject(tmp.path, "b"))).toBe(false)
       },
     })
   })
@@ -177,7 +183,7 @@ describe("Instance.containsPath", () => {
       fn: () => {
         expect(Instance.directory).toBe(Instance.worktree)
         expect(Instance.containsPath(path.join(tmp.path, "file.txt"))).toBe(true)
-        expect(Instance.containsPath("/etc/passwd")).toBe(false)
+        expect(Instance.containsPath(pathOutsideProject(tmp.path, "root"))).toBe(false)
       },
     })
   })
@@ -190,8 +196,8 @@ describe("Instance.containsPath", () => {
       fn: () => {
         // worktree is "/" for non-git projects, but containsPath should NOT allow all paths
         expect(Instance.containsPath(path.join(tmp.path, "file.txt"))).toBe(true)
-        expect(Instance.containsPath("/etc/passwd")).toBe(false)
-        expect(Instance.containsPath("/tmp/other")).toBe(false)
+        expect(Instance.containsPath(pathOutsideProject(tmp.path, "nogit-a"))).toBe(false)
+        expect(Instance.containsPath(pathOutsideProject(tmp.path, "nogit-b"))).toBe(false)
       },
     })
   })
