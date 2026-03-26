@@ -119,6 +119,13 @@ jobs:
             echo "Publishing $(basename $dir)..."
             chmod -R 755 "$dir"
             cd "$dir"
+            NAME=$(node -p "require('./package.json').name")
+            VER=$(node -p "require('./package.json').version")
+            if npm view "${NAME}@${VER}" version 2>/dev/null | grep -qx "$VER"; then
+              echo "$NAME@$VER already on npm, skipping"
+              cd -
+              continue
+            fi
             bun pm pack
             npm publish *.tgz --access public --tag "$CHANNEL"
             cd -
@@ -129,8 +136,14 @@ jobs:
         working-directory: packages/iris/dist/iris-code
         run: |
           CHANNEL="${OPENCODE_CHANNEL:-latest}"
-          bun pm pack
-          npm publish *.tgz --access public --tag "$CHANNEL"
+          NAME=$(node -p "require('./package.json').name")
+          VER=$(node -p "require('./package.json').version")
+          if npm view "${NAME}@${VER}" version 2>/dev/null | grep -qx "$VER"; then
+            echo "$NAME@$VER already on npm, skipping"
+          else
+            bun pm pack
+            npm publish *.tgz --access public --tag "$CHANNEL"
+          fi
 
       - name: Upload release artifacts
         if: ${{ env.OPENCODE_RELEASE == '1' }}

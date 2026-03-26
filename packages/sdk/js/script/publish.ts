@@ -8,9 +8,18 @@ const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 
 const pkg = (await import("../package.json").then((m) => m.default)) as {
+  name: string
+  version: string
   exports: Record<string, string | object>
 }
 const original = JSON.parse(JSON.stringify(pkg))
+{
+  const check = await $`npm view ${original.name}@${original.version} version`.nothrow().quiet()
+  if (check.exitCode === 0 && check.text().trim() === original.version) {
+    console.log(`Skipping publish: ${original.name}@${original.version} already on npm`)
+    process.exit(0)
+  }
+}
 function transformExports(exports: Record<string, string | object>) {
   for (const [key, value] of Object.entries(exports)) {
     if (typeof value === "object" && value !== null) {

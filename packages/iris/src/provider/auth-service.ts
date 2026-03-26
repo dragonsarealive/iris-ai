@@ -1,5 +1,5 @@
-import type { AuthOuathResult } from "@opencode-ai/plugin"
-import { NamedError } from "@opencode-ai/util/error"
+import type { AuthOuathResult } from "@iris-ai/plugin"
+import { NamedError } from "@iris-ai/util/error"
 import * as Auth from "@/auth/service"
 import { ProviderID } from "./schema"
 import { Effect, Layer, Record, ServiceMap, Struct } from "effect"

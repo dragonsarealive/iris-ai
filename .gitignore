@@ -38,6 +38,6 @@ AGENTS.md
 .iris-dev/
 tmp-*
 config.json
-iris.json
+/iris.json
 *.tgz
 tui-diag.txt

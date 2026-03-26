@@ -6,8 +6,16 @@ import { fileURLToPath } from "url"
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 
-await $`bun tsc`
 const pkg = await import("../package.json").then((m) => m.default)
+{
+  const check = await $`npm view ${pkg.name}@${pkg.version} version`.nothrow().quiet()
+  if (check.exitCode === 0 && check.text().trim() === pkg.version) {
+    console.log(`Skipping publish: ${pkg.name}@${pkg.version} already on npm`)
+    process.exit(0)
+  }
+}
+
+await $`bun tsc`
 const original = JSON.parse(JSON.stringify(pkg))
 for (const [key, value] of Object.entries(pkg.exports)) {
   const file = value.replace("./src/", "./dist/").replace(".ts", "")
