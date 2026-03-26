@@ -128,6 +128,8 @@ jobs:
             fi
             bun pm pack
             npm publish *.tgz --access public --tag "$CHANNEL"
+            # npm rate-limits rapid large publishes; pause between platforms
+            sleep 60
             cd -
           done
 
