@@ -28,3 +28,16 @@ opencode-dev
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# Internal / local-only (never publish)
+specs/
+research/
+PROJECT_CONTEXT.md
+AGENTS.md
+.cursor/
+.iris-dev/
+tmp-*
+config.json
+iris.json
+*.tgz
+tui-diag.txt
