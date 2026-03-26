@@ -114,6 +114,23 @@ jobs:
         working-directory: packages/iris
         run: |
           CHANNEL="${OPENCODE_CHANNEL:-latest}"
+          npm_publish_retry() {
+            local delay=90
+            local attempt=1
+            local max=8
+            while [ "$attempt" -le "$max" ]; do
+              if npm publish *.tgz --access public --tag "$CHANNEL"; then
+                return 0
+              fi
+              if [ "$attempt" -eq "$max" ]; then
+                return 1
+              fi
+              echo "npm publish failed (attempt $attempt/$max), waiting ${delay}s (often E429 rate limit)..."
+              sleep "$delay"
+              attempt=$((attempt + 1))
+              delay=$((delay + 45))
+            done
+          }
           for dir in dist/iris-code-*/; do
             [ -d "$dir" ] || continue
             echo "Publishing $(basename $dir)..."
@@ -127,9 +144,9 @@ jobs:
               continue
             fi
             bun pm pack
-            npm publish *.tgz --access public --tag "$CHANNEL"
+            npm_publish_retry
             # npm rate-limits rapid large publishes; pause between platforms
-            sleep 60
+            sleep 90
             cd -
           done
 
@@ -144,7 +161,21 @@ jobs:
             echo "$NAME@$VER already on npm, skipping"
           else
             bun pm pack
-            npm publish *.tgz --access public --tag "$CHANNEL"
+            delay=90
+            attempt=1
+            max=8
+            while [ "$attempt" -le "$max" ]; do
+              if npm publish *.tgz --access public --tag "$CHANNEL"; then
+                break
+              fi
+              if [ "$attempt" -eq "$max" ]; then
+                exit 1
+              fi
+              echo "npm publish failed (attempt $attempt/$max), waiting ${delay}s..."
+              sleep "$delay"
+              attempt=$((attempt + 1))
+              delay=$((delay + 45))
+            done
           fi
 
       - name: Upload release artifacts
