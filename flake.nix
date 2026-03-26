@@ -1,5 +1,5 @@
 {
-  description = "OpenCode development flake";
+  description = "IRIS development flake";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -37,16 +37,12 @@
             node_modules = final.callPackage ./nix/node_modules.nix {
               inherit rev;
             };
-            opencode = final.callPackage ./nix/opencode.nix {
+            iris = final.callPackage ./nix/opencode.nix {
               inherit node_modules;
-            };
-            desktop = final.callPackage ./nix/desktop.nix {
-              inherit opencode;
             };
           in
           {
-            inherit opencode;
-            opencode-desktop = desktop;
+            inherit iris;
           };
       };
 
@@ -56,17 +52,13 @@
           node_modules = pkgs.callPackage ./nix/node_modules.nix {
             inherit rev;
           };
-          opencode = pkgs.callPackage ./nix/opencode.nix {
+          iris = pkgs.callPackage ./nix/opencode.nix {
             inherit node_modules;
-          };
-          desktop = pkgs.callPackage ./nix/desktop.nix {
-            inherit opencode;
           };
         in
         {
-          default = opencode;
-          inherit opencode desktop;
-          # Updater derivation with fakeHash - build fails and reveals correct hash
+          default = iris;
+          inherit iris;
           node_modules_updater = node_modules.override {
             hash = pkgs.lib.fakeHash;
           };

@@ -10,10 +10,10 @@
   installShellFiles,
   versionCheckHook,
   writableTmpDirAsHomeHook,
-  node_modules ? callPackage ./node-modules.nix { },
+  node_modules ? callPackage ./node_modules.nix { },
 }:
 stdenvNoCC.mkDerivation (finalAttrs: {
-  pname = "opencode";
+  pname = "iris-code";
   inherit (node_modules) version src;
   inherit node_modules;
 
@@ -41,7 +41,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   buildPhase = ''
     runHook preBuild
 
-    cd ./packages/opencode
+    cd ./packages/iris
     bun --bun ./script/build.ts --single --skip-install
     bun --bun ./script/schema.ts schema.json
 
@@ -51,16 +51,15 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   installPhase = ''
     runHook preInstall
 
-    install -Dm755 dist/opencode-*/bin/opencode $out/bin/opencode
-    install -Dm644 schema.json $out/share/opencode/schema.json
+    install -Dm755 dist/iris-code-*/bin/iris-code $out/bin/iris-code
+    install -Dm644 schema.json $out/share/iris-code/schema.json
 
-    wrapProgram $out/bin/opencode \
+    wrapProgram $out/bin/iris-code \
       --prefix PATH : ${
         lib.makeBinPath (
           [
             ripgrep
           ]
-          # bun runs sysctl to detect if dunning on rosetta2
           ++ lib.optional stdenvNoCC.hostPlatform.isDarwin sysctl
         )
       }
@@ -69,10 +68,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   '';
 
   postInstall = lib.optionalString (stdenvNoCC.buildPlatform.canExecute stdenvNoCC.hostPlatform) ''
-    # trick yargs into also generating zsh completions
-    installShellCompletion --cmd opencode \
-      --bash <($out/bin/opencode completion) \
-      --zsh <(SHELL=/bin/zsh $out/bin/opencode completion)
+    installShellCompletion --cmd iris-code \
+      --bash <($out/bin/iris-code completion) \
+      --zsh <(SHELL=/bin/zsh $out/bin/iris-code completion)
   '';
 
   nativeInstallCheckInputs = [
@@ -84,14 +82,14 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   versionCheckProgramArg = "--version";
 
   passthru = {
-    jsonschema = "${placeholder "out"}/share/opencode/schema.json";
+    jsonschema = "${placeholder "out"}/share/iris-code/schema.json";
   };
 
   meta = {
-    description = "The open source coding agent";
-    homepage = "https://opencode.ai/";
+    description = "AI coding agent for the terminal";
+    homepage = "https://github.com/dragonsarealive/iris-ai";
     license = lib.licenses.mit;
-    mainProgram = "opencode";
+    mainProgram = "iris-code";
     inherit (node_modules.meta) platforms;
   };
 })
