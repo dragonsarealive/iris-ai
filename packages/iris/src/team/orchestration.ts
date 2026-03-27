@@ -1,9 +1,8 @@
 import { ulid } from "ulid"
-import { Database, eq } from "../storage/db"
-import { TeamOrchestrationStepTable } from "../session/session.sql"
 import { Team } from "./event"
 import { GlobalBus } from "@/bus/global"
-import type { SessionID } from "../session/schema"
+import { TeamRepo } from "./repo"
+import { runPromiseInstance } from "@/effect/runtime"
 
 export type OrchestrationAction =
   | "teammate_spawned"
@@ -19,7 +18,7 @@ export type OrchestrationAction =
   | "team_disbanded"
 
 export namespace Orchestration {
-  export function emit(input: {
+  export async function emit(input: {
     teamID: string
     actorSessionID: string
     targetSessionID?: string
@@ -29,21 +28,19 @@ export namespace Orchestration {
     const now = Date.now()
     const id = ulid()
 
-    Database.use((db) => {
-      db.insert(TeamOrchestrationStepTable)
-        .values({
+    await runPromiseInstance(
+      TeamRepo.use((r) =>
+        r.emitOrchestrationStep({
           id,
-          team_id: input.teamID,
+          teamID: input.teamID,
           time: now,
-          actor_session_id: input.actorSessionID as SessionID,
-          target_session_id: input.targetSessionID as SessionID | undefined,
+          actorSessionID: input.actorSessionID,
+          targetSessionID: input.targetSessionID,
           action: input.action,
           detail: input.detail,
-          time_created: now,
-          time_updated: now,
-        })
-        .run()
-    })
+        }),
+      ),
+    )
 
     GlobalBus.emit("event", {
       payload: {
@@ -60,22 +57,16 @@ export namespace Orchestration {
     })
   }
 
-  export function list(teamID: string) {
-    return Database.use((db) => {
-      return db
-        .select()
-        .from(TeamOrchestrationStepTable)
-        .where(eq(TeamOrchestrationStepTable.team_id, teamID))
-        .all()
-        .map((row) => ({
-          id: row.id,
-          teamID: row.team_id,
-          time: row.time,
-          actorSessionID: row.actor_session_id,
-          targetSessionID: row.target_session_id ?? undefined,
-          action: row.action as OrchestrationAction,
-          detail: row.detail ?? undefined,
-        }))
-    })
+  export async function list(teamID: string) {
+    const rows = await runPromiseInstance(TeamRepo.use((r) => r.listOrchestrationSteps(teamID)))
+    return rows.map((row) => ({
+      id: row.id,
+      teamID: row.team_id,
+      time: row.time,
+      actorSessionID: row.actor_session_id,
+      targetSessionID: row.target_session_id ?? undefined,
+      action: row.action as OrchestrationAction,
+      detail: row.detail ?? undefined,
+    }))
   }
 }

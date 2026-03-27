@@ -7,7 +7,6 @@ import {
   For,
   Match,
   on,
-  onMount,
   Show,
   Switch,
   useContext,
@@ -1716,16 +1715,18 @@ function InlineTool(props: {
       error()?.includes("user dismissed"),
   )
 
+  const handleClick = () => {
+    if (renderer.getSelection()?.getSelectedText()) return
+    props.onClick?.()
+  }
+
   return (
     <box
       marginTop={margin()}
       paddingLeft={3}
       onMouseOver={() => props.onClick && setHover(true)}
       onMouseOut={() => setHover(false)}
-      onMouseUp={() => {
-        if (renderer.getSelection()?.getSelectedText()) return
-        props.onClick?.()
-      }}
+      onMouseUp={handleClick}
       renderBefore={function () {
         const el = this as BoxRenderable
         const parent = el.parent
@@ -1751,10 +1752,17 @@ function InlineTool(props: {
     >
       <Switch>
         <Match when={props.spinner}>
-          <Spinner color={fg()} children={props.children} />
+          <box onMouseUp={props.onClick ? handleClick : undefined}>
+            <Spinner color={fg()} children={props.children} />
+          </box>
         </Match>
         <Match when={true}>
-          <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
+          <text
+            paddingLeft={3}
+            fg={fg()}
+            attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}
+            onMouseUp={props.onClick ? handleClick : undefined}
+          >
             <Show fallback={<>~ {props.pending}</>} when={props.complete}>
               <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
             </Show>
@@ -2019,12 +2027,20 @@ function Task(props: ToolProps<typeof TaskTool>) {
   const local = useLocal()
   const sync = useSync()
 
-  onMount(() => {
-    if (props.metadata.sessionId && !sync.data.message[props.metadata.sessionId]?.length)
-      sync.session.sync(props.metadata.sessionId)
+  const childSessionId = createMemo(() => {
+    const fromMeta = (props.metadata as { sessionId?: string })?.sessionId
+    if (fromMeta) return fromMeta
+    const out = props.output?.trim() ?? ""
+    const line = out.match(/^task_id:\s*(\S+)/m)
+    return line?.[1]
   })
 
-  const messages = createMemo(() => sync.data.message[props.metadata.sessionId ?? ""] ?? [])
+  createEffect(() => {
+    const sid = childSessionId()
+    if (sid && !sync.data.message[sid]?.length) sync.session.sync(sid)
+  })
+
+  const messages = createMemo(() => sync.data.message[childSessionId() ?? ""] ?? [])
 
   const tools = createMemo(() => {
     return messages().flatMap((msg) =>
@@ -2070,9 +2086,8 @@ function Task(props: ToolProps<typeof TaskTool>) {
       pending="Delegating..."
       part={props.part}
       onClick={() => {
-        if (props.metadata.sessionId) {
-          navigate({ type: "session", sessionID: props.metadata.sessionId })
-        }
+        const sid = childSessionId()
+        if (sid) navigate({ type: "session", sessionID: sid })
       }}
     >
       {content()}

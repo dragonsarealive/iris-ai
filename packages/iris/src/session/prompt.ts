@@ -765,16 +765,18 @@ export namespace SessionPrompt {
       metadata: async (val: { title?: string; metadata?: any }) => {
         const match = input.processor.partFromToolCall(options.toolCallId)
         if (match && match.state.status === "running") {
+          const prev = match.state
           await Session.updatePart({
             ...match,
             state: {
-              title: val.title,
-              metadata: val.metadata,
-              status: "running",
+              ...prev,
               input: args,
-              time: {
-                start: Date.now(),
-              },
+              ...(val.title !== undefined ? { title: val.title } : {}),
+              ...(val.metadata !== undefined
+                ? {
+                    metadata: { ...(prev.metadata ?? {}), ...val.metadata },
+                  }
+                : {}),
             },
           })
         }

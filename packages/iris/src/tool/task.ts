@@ -109,13 +109,15 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         providerID: msg.info.providerID,
       }
 
-      ctx.metadata({
-        title: params.description,
-        metadata: {
-          sessionId: session.id,
-          model,
-        },
-      })
+      await Promise.resolve(
+        ctx.metadata({
+          title: params.description,
+          metadata: {
+            sessionId: session.id,
+            model,
+          },
+        }),
+      )
 
       const messageID = MessageID.ascending()
 

@@ -33,7 +33,7 @@ export namespace PlanApproval {
       },
     })
 
-    Orchestration.emit({
+    await Orchestration.emit({
       teamID: input.teamID,
       actorSessionID: input.sessionID,
       action: "plan_submitted",
@@ -59,7 +59,7 @@ export namespace PlanApproval {
 
     const team = await TeamModule.get(teamID)
     if (team) {
-      Orchestration.emit({
+      await Orchestration.emit({
         teamID,
         actorSessionID: team.leadSessionID,
         targetSessionID: sessionID,
@@ -87,7 +87,7 @@ export namespace PlanApproval {
 
     const team = await TeamModule.get(teamID)
     if (team) {
-      Orchestration.emit({
+      await Orchestration.emit({
         teamID,
         actorSessionID: team.leadSessionID,
         targetSessionID: sessionID,
