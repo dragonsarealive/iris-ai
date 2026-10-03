@@ -15,7 +15,7 @@ import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import { ProviderTransform } from "@/provider/transform"
 import { ModelID, ProviderID } from "@/provider/schema"
-import { Database, lt, and, desc, eq, isNull, inArray } from "@/storage/db"
+import { Database, lt, and, desc, eq, isNull, inArray, sql } from "@/storage/db"
 import { MessageTable, PartTable, SessionTable } from "./session.sql"
 
 export namespace SessionCompaction {
@@ -356,6 +356,9 @@ When constructing the summary, try to stick to this template:
   const PRUNE_BASH_MAX_BYTES = 10_000
 
   async function pruneLargeBashOutputs() {
+    const config = await Config.get()
+    if (config.compaction?.prune === false) return
+
     const cutoff = Date.now() - DB_RETENTION_MS
     const largeParts = Database.use((db) =>
       db
@@ -363,7 +366,13 @@ When constructing the summary, try to stick to this template:
         .from(PartTable)
         .innerJoin(MessageTable, eq(MessageTable.id, PartTable.message_id))
         .innerJoin(SessionTable, eq(SessionTable.id, PartTable.session_id))
-        .where(and(lt(SessionTable.time_created, cutoff), isNull(SessionTable.time_archived)))
+        .where(
+          and(
+            lt(SessionTable.time_updated, cutoff),
+            isNull(SessionTable.time_archived),
+            sql`json_extract(${PartTable.data}, '$.type') = 'tool' AND json_extract(${PartTable.data}, '$.tool') = 'bash'`,
+          ),
+        )
         .all(),
     )
 
@@ -413,7 +422,7 @@ When constructing the summary, try to stick to this template:
       db
         .select({ id: SessionTable.id })
         .from(SessionTable)
-        .where(and(lt(SessionTable.time_created, cutoff), isNull(SessionTable.time_archived)))
+        .where(and(lt(SessionTable.time_updated, cutoff), isNull(SessionTable.time_archived)))
         .all(),
     )
 

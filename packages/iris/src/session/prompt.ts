@@ -672,10 +672,13 @@ export namespace SessionPrompt {
         system,
         messages: [
           ...MessageV2.toModelMessages(msgs, model),
-          ...(isLastStep
+          ...(isLastStep && format.type !== "json_schema"
             ? [
+                // Sent as a user turn, not an assistant prefill: prefill is a 400 on Claude 4.6+, and
+                // stacking it on a history that already ends in an assistant turn is a 400 on Mistral et al.
+                // Skipped in json_schema mode: StructuredOutput is required there, so a text-only wrap-up would conflict.
                 {
-                  role: "assistant" as const,
+                  role: "user" as const,
                   content: MAX_STEPS,
                 },
               ]
@@ -683,7 +686,7 @@ export namespace SessionPrompt {
         ],
         tools,
         model,
-        toolChoice: format.type === "json_schema" ? "required" : undefined,
+        toolChoice: format.type === "json_schema" ? "required" : isLastStep ? "none" : undefined,
       })
 
       // If structured output was captured, save it and exit immediately
@@ -720,6 +723,7 @@ export namespace SessionPrompt {
           overflow: !processor.message.finish,
         })
       }
+      if (isLastStep) break
       continue
     }
     SessionCompaction.prune({ sessionID })

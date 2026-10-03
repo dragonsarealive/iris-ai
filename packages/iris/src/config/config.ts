@@ -740,7 +740,7 @@ export namespace Config {
         .int()
         .positive()
         .optional()
-        .describe("Maximum number of agentic iterations before forcing text-only response"),
+        .describe("Maximum number of agentic iterations before forcing a text-only response. Unset by default (no limit); set it to cap runaway or long-running agents"),
       maxSteps: z.number().int().positive().optional().describe("@deprecated Use 'steps' field instead."),
       permission: Permission.optional(),
     })

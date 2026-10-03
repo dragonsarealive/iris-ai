@@ -1141,6 +1141,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
 
     const msgs = [
       { role: "assistant", content: "" },
+      { role: "user", content: "next" },
       {
         role: "assistant",
         content: [{ type: "text", text: "" }],
@@ -1149,9 +1150,9 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
 
     const result = ProviderTransform.message(msgs, openaiModel, {})
 
-    expect(result).toHaveLength(2)
+    expect(result).toHaveLength(3)
     expect(result[0].content).toBe("")
-    expect(result[1].content).toHaveLength(1)
+    expect(result[2].content).toHaveLength(1)
   })
 })
 
@@ -2651,5 +2652,83 @@ describe("ProviderTransform.variants", () => {
       const result = ProviderTransform.variants(model)
       expect(result).toEqual({})
     })
+  })
+})
+
+describe("ProviderTransform.message - adjacent assistant turns", () => {
+  const mistral = {
+    id: "mistral/devstral-medium",
+    providerID: "mistral",
+    api: { id: "devstral-medium-latest", url: "https://api.mistral.ai", npm: "@ai-sdk/mistral" },
+    capabilities: { interleaved: false },
+    options: {},
+    headers: {},
+  } as any
+
+  test("folds the trailing assistant run into one", () => {
+    const out = ProviderTransform.message(
+      [
+        { role: "user", content: "hi" },
+        { role: "assistant", content: [{ type: "text", text: "a" }] },
+        { role: "assistant", content: "b" },
+      ] as any,
+      mistral,
+      {},
+    )
+    expect(out.map((m) => m.role)).toEqual(["user", "assistant"])
+    expect(out[1].content).toEqual([
+      { type: "text", text: "a" },
+      { type: "text", text: "b" },
+    ])
+  })
+
+  test("merges providerOptions per provider and concatenates interleaved reasoning", () => {
+    const model = {
+      ...mistral,
+      id: "deepseek/deepseek-reasoner",
+      providerID: "deepseek",
+      api: { id: "deepseek-reasoner", url: "https://api.deepseek.com", npm: "@ai-sdk/openai-compatible" },
+      capabilities: { interleaved: { field: "reasoning_content" } },
+    }
+    const out = ProviderTransform.message(
+      [
+        { role: "user", content: "hi" },
+        {
+          role: "assistant",
+          content: [
+            { type: "reasoning", text: "think1 " },
+            { type: "text", text: "a" },
+          ],
+          providerOptions: { other: { keep: 1 } },
+        },
+        {
+          role: "assistant",
+          content: [
+            { type: "reasoning", text: "think2" },
+            { type: "text", text: "b" },
+          ],
+        },
+      ] as any,
+      model,
+      {},
+    )
+    expect(out.map((m) => m.role)).toEqual(["user", "assistant"])
+    const opts = out[1].providerOptions as any
+    expect(opts.openaiCompatible.reasoning_content).toBe("think1 think2")
+    expect(opts.other).toEqual({ keep: 1 })
+  })
+
+  test("leaves assistant/tool/assistant sequences alone", () => {
+    const out = ProviderTransform.message(
+      [
+        { role: "user", content: "hi" },
+        { role: "assistant", content: [{ type: "tool-call", toolCallId: "1", toolName: "x", input: {} }] },
+        { role: "tool", content: [{ type: "tool-result", toolCallId: "1", toolName: "x", output: { type: "text", value: "ok" } }] },
+        { role: "assistant", content: [{ type: "text", text: "done" }] },
+      ] as any,
+      mistral,
+      {},
+    )
+    expect(out.map((m) => m.role)).toEqual(["user", "assistant", "tool", "assistant"])
   })
 })
