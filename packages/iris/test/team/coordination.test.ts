@@ -13,7 +13,7 @@ const truncate = Layer.effectDiscard(
     db.run(/*sql*/ `DELETE FROM team_member`)
     db.run(/*sql*/ `DELETE FROM team`)
     db.run(/*sql*/ `DELETE FROM task_item`)
-    db.run(/*sql*/ `DELETE FROM project`)
+    db.run(/*sql*/ `DELETE FROM project WHERE id = 'proj-1'`)
   }),
 )
 
