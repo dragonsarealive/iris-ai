@@ -125,6 +125,8 @@ jobs:
             fi
           done
           TAG="${RELEASE_TAG}"
+          gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1 \r
+            || gh release create "$TAG" --repo "${{ github.repository }}" --title "$TAG" --verify-tag --generate-notes
           gh release upload "$TAG" dist/*.zip dist/*.tar.gz --clobber --repo "${{ github.repository }}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
