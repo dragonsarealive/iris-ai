@@ -1,4 +1,4 @@
-import type { ModelMessage } from "ai"
+import type { AssistantModelMessage, ModelMessage } from "ai"
 import { mergeDeep, unique } from "remeda"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import type { JSONSchema } from "zod/v4/core"
@@ -249,9 +249,48 @@ export namespace ProviderTransform {
     })
   }
 
+  // Mistral and some OpenAI-compatible gateways 400 with
+  // "Cannot have 2 or more assistant messages at the end of the list". Only the trailing
+  // run matters, and consecutive assistant turns carry nothing a single turn wouldn't.
+  function mergeProviderOptions(
+    a: AssistantModelMessage["providerOptions"],
+    b: AssistantModelMessage["providerOptions"],
+  ): AssistantModelMessage["providerOptions"] {
+    if (!a || !b) return a ?? b
+    const out = mergeDeep(a, b) as Record<string, Record<string, unknown>>
+    // Interleaved reasoning is carried as a string per assistant turn; concatenate instead of letting the later one win
+    const before = a.openaiCompatible
+    const after = b.openaiCompatible
+    for (const field of ["reasoning_content", "reasoning_details", "reasoning_text"]) {
+      const x = before?.[field]
+      const y = after?.[field]
+      if (typeof x === "string" && typeof y === "string") out.openaiCompatible[field] = x + y
+    }
+    return out as AssistantModelMessage["providerOptions"]
+  }
+
+  function mergeTrailingAssistants(msgs: ModelMessage[]): ModelMessage[] {
+    const toParts = (content: AssistantModelMessage["content"]) =>
+      typeof content === "string" ? (content === "" ? [] : [{ type: "text" as const, text: content }]) : content
+    let start = msgs.length
+    while (start > 0 && msgs[start - 1].role === "assistant") start--
+    if (msgs.length - start < 2) return msgs
+    const run = msgs.slice(start) as AssistantModelMessage[]
+    const merged = run.slice(1).reduce<AssistantModelMessage>(
+      (acc, msg) => ({
+        ...acc,
+        content: [...toParts(acc.content), ...toParts(msg.content)],
+        providerOptions: mergeProviderOptions(acc.providerOptions, msg.providerOptions),
+      }),
+      run[0],
+    )
+    return [...msgs.slice(0, start), merged]
+  }
+
   export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
     msgs = unsupportedParts(msgs, model)
     msgs = normalizeMessages(msgs, model, options)
+    msgs = mergeTrailingAssistants(msgs)
     if (
       (model.providerID === "anthropic" ||
         model.api.id.includes("anthropic") ||

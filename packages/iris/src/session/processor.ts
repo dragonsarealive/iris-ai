@@ -376,6 +376,16 @@ export namespace SessionProcessor {
                   next: Date.now() + delay,
                 })
                 await SessionRetry.sleep(delay, input.abort).catch(() => {})
+                // Drop parts written by the failed attempt so the retry does not duplicate partial output
+                for (const part of await MessageV2.parts(input.assistantMessage.id)) {
+                  await Session.removePart({
+                    sessionID: input.sessionID,
+                    messageID: input.assistantMessage.id,
+                    partID: part.id,
+                  })
+                }
+                for (const key of Object.keys(toolcalls)) delete toolcalls[key]
+                snapshot = undefined
                 continue
               }
               input.assistantMessage.error = error

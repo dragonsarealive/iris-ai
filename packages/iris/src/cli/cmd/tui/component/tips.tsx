@@ -49,6 +49,7 @@ export function Tips() {
 }
 
 const TIPS = [
+  "Agents run with no step limit by default. Set {highlight}steps{/highlight} on an agent in {highlight}iris.json{/highlight} to cap agentic iterations and force a text summary when it's reached",
   "Type {highlight}@{/highlight} followed by a filename to fuzzy search and attach files",
   "Start a message with {highlight}!{/highlight} to run shell commands directly (e.g., {highlight}!ls -la{/highlight})",
   "Press {highlight}Tab{/highlight} to cycle between Build and Plan agents",
