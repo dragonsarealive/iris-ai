@@ -207,6 +207,8 @@ for (const item of targets) {
         version: Script.version,
         os: [item.os],
         cpu: [item.arch],
+        // npm trusted publishing verifies provenance against this
+        repository: { type: "git", url: "git+https://github.com/dragonsarealive/iris-ai.git" },
       },
       null,
       2,
