@@ -155,7 +155,9 @@ jobs:
               delay=$((delay + 45))
             done
           }
-          for dir in dist/iris-code-*/; do
+          # windows-x64 first so a partial publish is still installable on Windows
+          ORDERED="dist/iris-code-windows-x64/ $(ls -d dist/iris-code-*/ | grep -v iris-code-windows-x64/\$)"
+          for dir in $ORDERED; do
             [ -d "$dir" ] || continue
             PKG_NAME=$(basename "$dir")
             echo "Publishing ${PKG_NAME}..."
