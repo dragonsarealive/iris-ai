@@ -17,7 +17,7 @@
 | GitHub org URLs | ✅ All `anomalyco/opencode` → `dragonsarealive/iris-ai` across CLI, desktop, web docs, workflows, install script, containers, extensions, READMEs; 3 upstream deps kept (`ghostty-web`, `tree-sitter-clojure`, `models.dev`) |
 | `bun typecheck` (packages/iris) | ✅ 0 errors; team Effect migration complete; use package-scoped checks |
 | Team Effect migration | ✅ All `Database.use()` eliminated from caller files (`index.ts`, `task.ts`, `message.ts`, `orchestration.ts`). DB access only through `TeamRepo` + `TeamCoordination` Effect services. `completeTask` merged into single transaction (TOCTOU fix). 17/17 team tests pass. See `specs/team-effect-migration-checklist.md` + `specs/team-effect-migration-fixes.md` (all fixes complete). |
-| **v1.2.29 release** | 🚧 **Windows x64 + wrapper published to npm ✅** — `npm install -g iris-code@1.2.29` verified working (4s install). **11 remaining platform packages need CI dispatch.** v1.2.28 retracted (broken wrapper published source deps). TUI agent teams wiring committed + pushed to `dev`. **Next:** create GH release v1.2.29, then `gh workflow run publish-cli.yml --ref dev -f version=1.2.29 -f channel=latest` |
+| **v1.2.31 release** | ✅ **Published 2026-10-06.** `iris-code@1.2.31` + all 12 `iris-code-<platform>` packages on npm (`latest`); clean `npm i iris-code@1.2.31` verified, `iris-code --version` → 1.2.31. GitHub release `v1.2.31` has the platform zips/tarballs. Contains PR #1 (trailing-assistant 400 + step-limit/retry/cleanup hardening, `89ca899`) and the Linux CI test fix (`86b227c`). CLI packages now publish via **npm trusted publishing (OIDC)**, not `NPM_TOKEN` — see `CHANGELOG.md`. |
 
 ---
 
@@ -64,7 +64,10 @@
 
 ## 🚨 ACTIVE ISSUES
 
-- **v1.2.29 npm publish: 11 of 12 platform packages pending CI dispatch** — `iris-code-windows-x64@1.2.29` + `iris-code@1.2.29` wrapper published and verified. Remaining 11 platforms need `gh workflow run publish-cli.yml --ref dev -f version=1.2.29 -f channel=latest` (create GH release v1.2.29 first). v1.2.28 retracted (wrapper published with 90+ source deps instead of optionalDependencies-only).
+- **Publishing config (v1.2.31):** `publish-cli.yml` publishes the CLI packages through npm trusted publishing (each of the 13 packages has a Trusted Publisher: `dragonsarealive/iris-ai` + `publish-cli.yml`, set up in the npm UI; the form says it cannot be edited, only deleted and recreated). `publish-sdk` / `publish-plugin` still use the `NPM_TOKEN` secret and have no trusted publisher; `@iris-ai/sdk` and `@iris-ai/plugin` are still at 1.2.27. A staging-only or non-bypass-2FA token fails with `E_STAGE_REQUIRED`/`E403`; the job fails fast on E401/E403/E404/E422.
+- **Dirty tree on `upstream-cherry-picks`** — ~125 uncommitted files (upstream Tier 1/2 cherry-picks, AI SDK v6). `dev` has moved on (PR #1 merged, 1.2.31 bump, workflow commits): do not blindly pull; commit in slices (`specs/deploy-commit-slices-checklist.md`) and reconcile with the merged `test/team/*` change (`DELETE FROM project WHERE id = 'proj-1'`).
+- **Security review finding (unverified, uncommitted code):** in the dirty tree `packages/iris/src/tool/bash.ts` replaced `fs.realpath(path.resolve(cwd, arg))` with plain `path.resolve`, so a symlink inside the project pointing outside it would pass `Instance.containsPath` and skip the `external_directory` prompt. Restore a realpath step (also for `params.workdir`) before committing that file.
+- **Not verified:** live Mistral/Devstral run with `steps: 3`; tests for the cleanup SQL (`json_extract` bash filter) and retry part-removal; `step++` consumes the `steps` budget on subtask/compaction rounds (`session/prompt.ts`).
 - **`completeTask` TOCTOU** — `coordination.ts` `completeTask()` does separate query/tx calls instead of a single transaction. Low risk (SQLite single-writer) but inconsistent with `claimTask` which uses a single `tx()`. Fix spec in `specs/team-effect-migration-fixes.md` Fix 2. **(FIXED)** — merged into single transaction.
 - Agent teams SDK: team client methods not in auto-generated SDK yet (SDK regen needed once server runs to extract OpenAPI spec; team types manually exported in `packages/sdk/js/src/v2/team.ts`).
 - Team integration tests: `runner/addMember` lifecycle + orchestration feed order tests not yet added (Phase 9 expansion + Phase 12.5).
@@ -76,8 +79,8 @@
 ## 🎯 NEXT ACTIONS
 
 1. **Complete remaining tasks** — See **`specs/remaining-tasks-plan.md`** for ordered implementation plan.
-2. **Dispatch CI for v1.2.29 remaining platforms** — 11 of 12 packages pending. Windows x64 + wrapper already on npm. Create GH release v1.2.29, then: `gh workflow run publish-cli.yml --repo dragonsarealive/iris-ai --ref dev -f version=1.2.29 -f channel=latest`. Verify: `npm view iris-code-linux-x64@1.2.29`.
-3. **Homebrew formula** — Update `dragonsarealive/homebrew-tap` with real URLs + sha256 once v1.2.29 npm publish completes.
+2. **v1.2.31 follow-ups** — live `steps: 3` check with the installed build; add tests for cleanup SQL + retry cleanup; commit the dirty tree in slices; decide whether to configure trusted publishers for `@iris-ai/sdk` / `@iris-ai/plugin` (or refresh `NPM_TOKEN`) before the next SDK release.
+3. **Homebrew formula** — Update `dragonsarealive/homebrew-tap` with real URLs + sha256 once v1.2.31 npm publish completes.
 4. **Team backlog** — Work from **`specs/team-improvements-backlog.md`** (P0→P4). Treat rows there as the implementation checklist; update that file’s checkboxes when items ship.
 5. **P0 next** — Integration tests: runner/addMember lifecycle, orchestration feed order, scripted lead tool flow (no live LLM). Then **SDK regen** for typed `/team` client.
 6. **Branding/legal** — Legal transfer complete (`specs/legal-transfer-checklist.md`). GitHub org URLs migrated to `dragonsarealive/iris-ai`. Publish infrastructure checklist at `specs/publish-infrastructure-checklist.md`. **Remaining:** §1c video/poster/zip files when added. §5 Zen smoke test (manual). **Teams cookbook** when P3 doc row is scheduled.
@@ -100,6 +103,7 @@
 
 ## 📚 DETAILED REFERENCES
 
+- **`CHANGELOG.md`** — release notes from v1.2.31 onward (Keep a Changelog); older history is the session log below and `git log`.
 - `specs/legal-review-checklist.md` — Terms/Privacy review before ship (solo or counsel)
 - `specs/legal-transfer-checklist.md` — Full legal entity transfer checklist (Andrés Bolaños Cano / irislab.dev)
 - `LEGAL_NOTICE.md` — Repo-root legal notice (owner, Zen third-party disclaimer)
@@ -114,7 +118,7 @@
 
 ## 📊 CURRENT STATUS SUMMARY
 
-**~85% core product parity; ~95% agent-teams spec (phases 1-12 done + TUI wiring + Effect migration); v1.2.29 release ~15% complete** (Windows x64 + wrapper on npm, verified working; 11 platform packages pending CI dispatch). Team Effect migration complete: all `Database.use()` calls eliminated from team module callers, 17/17 tests pass. Next priority: commit Effect migration, dispatch CI for remaining platforms, Homebrew formula, then P0 backlog (integration tests + SDK regen).
+**~85% core product parity; ~95% agent-teams spec (phases 1-12 done + TUI wiring + Effect migration); v1.2.31 released** (all 13 npm packages live via trusted publishing; GitHub release + `CHANGELOG.md` started). Next priority: live `steps: 3` check, tests for cleanup/retry paths, commit the dirty tree in slices, Homebrew formula, then P0 backlog (integration tests + SDK regen).
 
 ---
 
@@ -187,3 +191,7 @@
 | 2026-03-26 | **Teams Feature Risk Analysis + Fixes:** Analyzed 3 risks in agent teams (sync DB ops, no coordination, passive orchestration). Created Effect-based services: `TeamRepo` (repo.ts), `TeamCoordination` (coordination.ts). Code review identified dead code + bugs. Migrated callers: `TeamModule` → `TeamRepo`, `TaskList.claim` → `TeamCoordination`. Fixed `updateMemberStatus()` bug (was only filtering by team_id, not team_id+session_id). Deleted `orchestrator.ts` (singleton runtime leak, busy-wait polling, silent error swallowing). Added `TeamCoordination` to `InstanceServices`. 13 tests pass, typecheck clean. Updated `docs/teams-analysis/RISKS_AND_FIXES.md` with resolution notes. |
 | 2026-03-26 | **Team Effect migration (complete):** Full migration of all `Database.use()` calls in `src/team/` to Effect services. `index.ts`, `task.ts`, `message.ts`, `orchestration.ts` now delegate to `TeamRepo`/`TeamCoordination` via `runPromiseInstance()`. Fixed test failures from `AsyncLocalStorage` context (local `emitOrchestration` helper in `coordination.ts`). Removed `as any` cast in `repo.ts` (`action` param typed as `OrchestrationAction`). Cleaned dead imports. Merged `completeTask` into single transaction (TOCTOU fix). 17/17 team tests pass, typecheck clean. Created `specs/remaining-tasks-plan.md` implementation plan for next agent. |
 | 2026-03-27 | **Team Effect migration post-review fixes:** Removed dead imports from `orchestration.ts` (`eq`, `TeamOrchestrationStepTable`, `SessionID`). Fixed missing `r.addMember(member)` call in `index.ts` (addMember was constructing member but not persisting to DB). Typecheck clean, team tests pass. |
+| 2026-10-03 | **Trailing-assistant 400 fix (PR #1, `89ca899`):** root-caused `Cannot have 2 or more assistant messages at the end of the list` — on the last step `session/prompt.ts` appended the MAX_STEPS text as a trailing assistant prefill. Now a `user` turn (skipped for json_schema) + `mergeTrailingAssistants` in `provider/transform.ts`. Review-subagent follow-ups: terminal last step with `toolChoice:"none"`, retry drops failed-attempt parts (`processor.ts`), cleanup/prune keyed on `time_updated` (`compaction.ts`), reasoning merge. Local build installed at `%LOCALAPPDATA%\irisin\iris.exe`. |
+| 2026-10-05 | **PR #1 merged + 1.2.31 bump.** `unit (linux)` was red on plain `dev` too (not caused by the PR): `test/team/repo.test.ts` + `coordination.test.ts` ran `DELETE FROM project`, wiping the project row of instances cached by earlier files, so `Session.list`/`tui.selectSession` hit `FOREIGN KEY constraint failed` on Linux (file order differs from Windows). Fix `86b227c`: delete only `proj-1`. Merged as `6d5adb2`; version bump `def2cb5`; tag `v1.2.31` pushed. First publish attempts failed: the workflow never created the GitHub release (`release not found`), fixed. |
+| 2026-10-05/06 | **npm publish saga → OIDC.** The old `NPM_TOKEN` returned `E404` (cause never confirmed; likely expired); a new token returned `E403 ... bypass 2fa` then `E_STAGE_REQUIRED` (token was stage-only / no bypass). Switched to **npm trusted publishing**: configured a Trusted Publisher (`dragonsarealive/iris-ai`, `publish-cli.yml`) on all 13 packages, gave the `publish-cli` job `id-token: write`, npm >= 11.5.1 on Node 22, removed the token `.npmrc` step for that job. First OIDC run failed `E422` (provenance: `repository.url` empty) → added `repository` to the generated platform + wrapper `package.json`. Also: `windows-x64` published first, release auto-created, fail-fast on E401/E403/E404/E422. |
+| 2026-10-06 | **v1.2.31 published.** 12/12 platform packages + `iris-code` wrapper at 1.2.31 (`latest`); clean install verified. Started `CHANGELOG.md`; refreshed this file. A security review flagged the removed `realpath` in the uncommitted `bash.ts` (see Active issues). |
