@@ -144,8 +144,12 @@ jobs:
             local attempt=1
             local max=8
             while [ "$attempt" -le "$max" ]; do
-              if npm publish *.tgz --access public --tag "$CHANNEL"; then
+              if npm publish *.tgz --access public --tag "$CHANNEL" 2>&1 | tee /tmp/npm-publish.log; [ "${PIPESTATUS[0]}" -eq 0 ]; then
                 return 0
+              fi
+              if grep -q -E "E401|E403|E404" /tmp/npm-publish.log; then
+                echo "::error::npm auth/permission error (not retryable). Check NPM_TOKEN: it needs publish rights and bypass-2FA."
+                exit 1
               fi
               if [ "$attempt" -eq "$max" ]; then
                 return 1
