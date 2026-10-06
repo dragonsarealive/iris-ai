@@ -55,6 +55,9 @@ jobs:
   publish-cli:
     needs: build-cli
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write # npm trusted publishing (OIDC)
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -68,8 +71,12 @@ jobs:
           name: cli-dist
           path: packages/iris/dist
 
-      - name: Configure npm auth
-        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+      # Trusted publishing needs npm >= 11.5.1 and Node >= 22.14, and no NPM_TOKEN.
+      - name: Setup Node and npm for trusted publishing
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install -g npm@latest && npm --version
 
       - name: Prepare wrapper package
         working-directory: packages/iris
@@ -148,7 +155,7 @@ jobs:
                 return 0
               fi
               if grep -q -E "E401|E403|E404" /tmp/npm-publish.log; then
-                echo "::error::npm auth/permission error (not retryable). Check NPM_TOKEN: it needs publish rights and bypass-2FA."
+                echo "::error::npm auth/permission error (not retryable). Check the npm Trusted Publisher config for this package (repo dragonsarealive/iris-ai, workflow publish-cli.yml)."
                 exit 1
               fi
               if [ "$attempt" -eq "$max" ]; then
